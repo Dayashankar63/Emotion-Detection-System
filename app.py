@@ -12,24 +12,26 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
  
-# Load model - tensorflow ke bina
+# Load model - tensorflow optional
+model = None
 try:
     import tensorflow as tf
     base_dir = os.path.dirname(os.path.abspath(__file__))
     model = tf.keras.models.load_model(os.path.join(base_dir, "emotiondetector.h5"))
     logger.info("Model loaded successfully")
+except ImportError:
+    logger.warning("TensorFlow not installed - model unavailable")
 except Exception as e:
     logger.error(f"Error loading model: {e}")
-    raise
  
 # Load face cascade
+face_cascade = None
 try:
     haar_file = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
     face_cascade = cv2.CascadeClassifier(haar_file)
     logger.info("Face cascade loaded")
 except Exception as e:
     logger.error(f"Error loading face cascade: {e}")
-    raise
  
 labels = {0: 'angry', 1: 'disgust', 2: 'fear', 3: 'happy', 4: 'neutral', 5: 'sad', 6: 'surprise'}
 label_emojis = {
@@ -48,6 +50,9 @@ def detect():
 @app.route('/api/predict', methods=['POST'])
 def predict():
     """Browser se base64 image leke emotion detect karo"""
+    if model is None:
+        return jsonify({'error': 'Model not loaded - TensorFlow unavailable'}), 503
+ 
     try:
         data = request.get_json()
         if not data or 'image' not in data:
