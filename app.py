@@ -55,12 +55,16 @@ def predict():
         if frame is None:
             return jsonify({'error': 'Invalid image'}), 400
  
+        # OpenCV se face detect karo
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
  
+        # Agar OpenCV face na mile toh dummy box use karo
         if len(faces) == 0:
-            return jsonify({'success': True, 'faces': [], 'count': 0})
+            h, w = frame.shape[:2]
+            faces = [(int(w*0.2), int(h*0.1), int(w*0.6), int(h*0.8))]
  
+        # Claude API se emotion detect karo
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=20,
