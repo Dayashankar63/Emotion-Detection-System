@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Emotion Detection - Live</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .video-wrapper { position: relative; display: inline-block; }
+        #canvas-overlay {
+            position: absolute; top: 0; left: 0;
+            pointer-events: none;
+        }
+        #emotion-display {
+            text-align: center; font-size: 2rem;
+            margin: 15px 0; min-height: 60px;
+        }
+        #status { text-align: center; color: #888; margin: 8px 0; font-size: 0.95rem; }
+        .confidence-bar {
+            background: #eee; border-radius: 10px;
+            height: 12px; margin: 6px 0;
+        }
+        .confidence-fill {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            height: 100%; border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎭 Real-Time Face Emotion Detection</h1>
+            <p>AI-powered emotion recognition using your webcam</p>
+            <a href="/" class="back-button">← Back to Home</a>
+        </header>
+
+        <main>
+            <div class="video-container">
+                <div class="video-wrapper">
+                    <video id="video" width="640" height="480" autoplay playsinline style="border-radius:12px;"></video>
+                    <canvas id="canvas-overlay" width="640" height="480"></canvas>
+                </div>
+                <canvas id="capture-canvas" width="640" height="480" style="display:none;"></canvas>
+            </div>
+
+            <div id="status">📷 Camera starting...</div>
+            <div id="emotion-display">—</div>
+
+            <div class="info-panel">
+                <h2>Detected Emotions</h2>
+                <div class="emotions-grid">
+                    <div class="emotion-card"><span class="emoji">😠</span><span class="label">Angry</span></div>
+                    <div class="emotion-card"><span class="emoji">🤢</span><span class="emoji">Disgust</span></div>
+                    <div class="emotion-card"><span class="emoji">😨</span><span class="label">Fear</span></div>
+                    <div class="emotion-card"><span class="emoji">😊</span><span class="label">Happy</span></div>
+                    <div class="emotion-card"><span class="emoji">😐</span><span class="label">Neutral</span></div>
+                    <div class="emotion-card"><span class="emoji">😢</span><span class="label">Sad</span></div>
+                    <div class="emotion-card"><span class="emoji">😲</span><span class="label">Surprise</span></div>
+                </div>
+            </div>
+        </main>
+
+        <footer><p>Powered by TensorFlow & Keras | Built with Flask</p></footer>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const captureCanvas = document.getElementById('capture-canvas');
+        const overlayCanvas = document.getElementById('canvas-overlay');
+        const ctx = captureCanvas.getContext('2d');
+        const overlayCtx = overlayCanvas.getContext('2d');
+        const statusEl = document.getElementById('status');
+        const emotionEl = document.getElementById('emotion-display');
+        let detecting = false;
+
+        // Start webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+                statusEl.textContent = '✅ Camera active — detecting emotions...';
+                setInterval(detectEmotion, 800);
+            })
+            .catch(err => {
+                statusEl.textContent = '❌ Camera access denied: ' + err.message;
+            });
+
+        async function detectEmotion() {
+            if (detecting) return;
+            detecting = true;
+            try {
+                ctx.drawImage(video, 0, 0, 640, 480);
+                const imageData = captureCanvas.toDataURL('image/jpeg', 0.8);
+
+                const res = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                });
+                const data = await res.json();
+
+                overlayCtx.clearRect(0, 0, 640, 480);
+
+                if (data.success && data.faces.length > 0) {
+                    const face = data.faces[0];
+                    const { x, y, w, h } = face.box;
+
+                    // Draw box
+                    overlayCtx.strokeStyle = '#667eea';
+                    overlayCtx.lineWidth = 3;
+                    overlayCtx.strokeRect(x, y, w, h);
+
+                    // Draw label
+                    overlayCtx.fillStyle = '#667eea';
+                    overlayCtx.fillRect(x, y - 32, w, 32);
+                    overlayCtx.fillStyle = 'white';
+                    overlayCtx.font = 'bold 16px Arial';
+                    overlayCtx.fillText(`${face.emoji} ${face.emotion} (${face.confidence}%)`, x + 6, y - 10);
+
+                    emotionEl.innerHTML = `${face.emoji} <strong>${face.emotion}</strong> — ${face.confidence}% confidence`;
+                    statusEl.textContent = `✅ ${data.count} face(s) detected`;
+                } else {
+                    emotionEl.textContent = '🔍 No face detected';
+                    statusEl.textContent = '📷 Detecting...';
+                }
+            } catch (e) {
+                statusEl.textContent = '⚠️ Error: ' + e.message;
+            }
+            detecting = false;
+        }
+    </script>
+</body>
+</html>
